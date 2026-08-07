@@ -12,8 +12,8 @@ export default function Home() {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Connect to backend (now on port 3001)
-    socketRef.current = io("https://speakfluent.onrender.com/");
+    // Connect to production backend
+    socketRef.current = io("https://speakfluent.onrender.com");
 
     socketRef.current.on("match_found", (data: { roomId: string }) => {
       console.log("Matched!", data);
