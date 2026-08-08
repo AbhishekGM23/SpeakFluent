@@ -2,47 +2,142 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Loader2, X } from "lucide-react";
+import { Mic, MicOff, Loader2, X } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
 type AppState = "HOME" | "SEARCHING" | "MATCHED";
 
 export default function Home() {
   const [appState, setAppState] = useState<AppState>("HOME");
+  const [isMuted, setIsMuted] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const rtcConfig = {
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  };
 
   useEffect(() => {
     // Connect to production backend
     socketRef.current = io("https://speakfluent.onrender.com");
 
-    socketRef.current.on("match_found", (data: { roomId: string }) => {
+    socketRef.current.on("match_found", async (data: { roomId: string, initiator: boolean }) => {
       console.log("Matched!", data);
       setAppState("MATCHED");
+      await setupWebRTC(data.initiator);
     });
 
     socketRef.current.on("partner_left", () => {
       console.log("Partner left");
+      cleanupCall();
       setAppState("HOME");
     });
 
+    // WebRTC Signaling listeners
+    socketRef.current.on("webrtc_offer", async (offer) => {
+      if (!peerConnectionRef.current) return;
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnectionRef.current.createAnswer();
+      await peerConnectionRef.current.setLocalDescription(answer);
+      socketRef.current?.emit("webrtc_answer", answer);
+    });
+
+    socketRef.current.on("webrtc_answer", async (answer) => {
+      if (!peerConnectionRef.current) return;
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socketRef.current.on("webrtc_ice_candidate", async (candidate) => {
+      if (!peerConnectionRef.current) return;
+      try {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("Error adding received ice candidate", e);
+      }
+    });
+
     return () => {
+      cleanupCall();
       socketRef.current?.disconnect();
     };
   }, []);
 
-  const startSearch = () => {
-    setAppState("SEARCHING");
-    socketRef.current?.emit("find_partner");
+  const setupWebRTC = async (isInitiator: boolean) => {
+    const pc = new RTCPeerConnection(rtcConfig);
+    peerConnectionRef.current = pc;
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketRef.current?.emit("webrtc_ice_candidate", event.candidate);
+      }
+    };
+
+    pc.ontrack = (event) => {
+      if (audioRef.current) {
+        audioRef.current.srcObject = event.streams[0];
+      }
+    };
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
+    }
+
+    if (isInitiator) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socketRef.current?.emit("webrtc_offer", offer);
+    }
+  };
+
+  const cleanupCall = () => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    setIsMuted(false);
+  };
+
+  const startSearch = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = stream;
+      setAppState("SEARCHING");
+      socketRef.current?.emit("find_partner");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      alert("Please allow microphone access to use this feature.");
+    }
   };
 
   const cancelSearch = () => {
+    cleanupCall();
     setAppState("HOME");
     socketRef.current?.emit("cancel_search");
   };
 
   const endCall = () => {
+    cleanupCall();
     setAppState("HOME");
     socketRef.current?.emit("leave_chat");
+  };
+
+  const toggleMute = () => {
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
+    }
   };
 
   return (
@@ -166,8 +261,11 @@ export default function Home() {
               </div>
 
               <div className="flex items-center gap-4">
-                <button className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition text-white">
-                  <Mic className="w-7 h-7" />
+                <button 
+                  onClick={toggleMute}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition text-white ${isMuted ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30' : 'bg-white/10 hover:bg-white/20'}`}
+                >
+                  {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
                 </button>
                 <button 
                   onClick={endCall}
@@ -181,6 +279,8 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <audio ref={audioRef} autoPlay className="hidden" />
     </div>
   );
 }

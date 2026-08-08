@@ -57,8 +57,13 @@ export class MatchmakingGateway implements OnGatewayConnection, OnGatewayDisconn
       client.join(roomId);
       this.server.sockets.sockets.get(partner.socketId)?.join(roomId);
 
-      this.server.to(roomId).emit('match_found', {
+      client.emit('match_found', {
         roomId,
+        initiator: true,
+      });
+      this.server.sockets.sockets.get(partner.socketId)?.emit('match_found', {
+        roomId,
+        initiator: false,
       });
       console.log(`Matched ${user.id} with ${partner.id}`);
     } else {
