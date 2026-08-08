@@ -15,6 +15,9 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "Speak Fluent | English Practice",
   description: "Practice spoken English with real people around the world.",
+  other: {
+    "ce8c6bc01b2f108dbed955a312a32e468099dc95": "ce8c6bc01b2f108dbed955a312a32e468099dc95"
+  }
 };
 
 export default function RootLayout({
