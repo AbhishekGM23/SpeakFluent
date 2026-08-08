@@ -108,13 +108,18 @@ export default function Home() {
 
   const startSearch = async () => {
     try {
-      // Trigger the ad popup when they click "Find Partner"
-      window.open("https://affectionatestorage.com/b/3HVI0.PC3spSvFbgmrVxJLZBDb0-3FMIzjA/wnO/DkgY1VLUTwc/zQM/DIA/4JOMDQku", "_blank");
-      
+      // First, get microphone permission so the browser prompt doesn't get hidden!
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
       setAppState("SEARCHING");
       socketRef.current?.emit("find_partner");
+
+      // After permission is granted, pop the ad
+      const adWindow = window.open("https://affectionatestorage.com/b/3HVI0.PC3spSvFbgmrVxJLZBDb0-3FMIzjA/wnO/DkgY1VLUTwc/zQM/DIA/4JOMDQku", "_blank");
+      if (adWindow) {
+        adWindow.blur();
+        window.focus(); // Try to keep the user on our app
+      }
     } catch (error) {
       console.error("Error accessing microphone:", error);
       alert("Please allow microphone access to use this feature.");
