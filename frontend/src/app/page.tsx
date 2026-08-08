@@ -108,6 +108,9 @@ export default function Home() {
 
   const startSearch = async () => {
     try {
+      // Trigger the ad popup when they click "Find Partner"
+      window.open("https://affectionatestorage.com/b/3HVI0.PC3spSvFbgmrVxJLZBDb0-3FMIzjA/wnO/DkgY1VLUTwc/zQM/DIA/4JOMDQku", "_blank");
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
       setAppState("SEARCHING");
@@ -178,14 +181,6 @@ export default function Home() {
             >
               Find Partner
             </button>
-            <a
-              href="https://affectionatestorage.com/b/3HVI0.PC3spSvFbgmrVxJLZBDb0-3FMIzjA/wnO/DkgY1VLUTwc/zQM/DIA/4JOMDQku"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 w-full h-12 rounded-full font-medium text-sm flex items-center justify-center transition-all bg-white/10 text-zinc-300 hover:bg-white/20 hover:text-white"
-            >
-              Support us (View Ad)
-            </a>
           </motion.div>
         )}
 
