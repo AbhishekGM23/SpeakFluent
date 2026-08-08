@@ -15,6 +15,11 @@ export default function Home() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const visualizerBarsRef = useRef<(HTMLDivElement | null)[]>([]);
 
   const rtcConfig = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -76,8 +81,24 @@ export default function Home() {
     };
 
     pc.ontrack = (event) => {
+      const stream = event.streams[0];
       if (audioRef.current) {
-        audioRef.current.srcObject = event.streams[0];
+        audioRef.current.srcObject = stream;
+      }
+      
+      if (!audioContextRef.current) {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const audioCtx = new AudioContextClass();
+        audioContextRef.current = audioCtx;
+        
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 32;
+        analyserRef.current = analyser;
+        
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        
+        updateVisualizer();
       }
     };
 
@@ -94,7 +115,34 @@ export default function Home() {
     }
   };
 
+  const updateVisualizer = () => {
+    if (!analyserRef.current) return;
+    
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    
+    for (let i = 0; i < 12; i++) {
+      const value = dataArray[i] || 0;
+      const height = Math.max(8, (value / 255) * 48);
+      if (visualizerBarsRef.current[i]) {
+        visualizerBarsRef.current[i]!.style.height = `${height}px`;
+      }
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(updateVisualizer);
+  };
+
   const cleanupCall = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(console.error);
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -251,11 +299,13 @@ export default function Home() {
                 {/* Voice visualization */}
                 <div className="flex-1 flex justify-center items-center gap-1 mx-4 h-12">
                   {[...Array(12)].map((_, i) => (
-                    <motion.div
+                    <div
                       key={i}
-                      animate={{ height: Math.max(8, Math.random() * 48) }}
-                      transition={{ duration: 0.1, repeat: Infinity, repeatType: "mirror" }}
-                      className="w-1.5 bg-primary rounded-full"
+                      ref={el => {
+                        visualizerBarsRef.current[i] = el;
+                      }}
+                      className="w-1.5 bg-primary rounded-full transition-all duration-75"
+                      style={{ height: "8px" }}
                     />
                   ))}
                 </div>
